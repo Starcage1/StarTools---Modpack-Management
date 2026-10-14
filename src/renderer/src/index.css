@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/* Class-based dark mode for renderer components that use dark: utilities. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --app-font-size: 16px;
+  --app-icon-size: 20px;
+  --bg-app: #0c0d10;
+  --bg-surface: #14151a;
+  --bg-elevated: #1e2027;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
+
+  /* Tailwind gray utilities are mapped to the active neutral palette. */
+  --color-white: var(--bg-surface);
+  --color-gray-50: #f4f4f5;
+  --color-gray-100: #f4f4f5;
+  --color-gray-200: #d4d4d8;
+  --color-gray-300: #a1a1aa;
+  --color-gray-400: #8b8b95;
+  --color-gray-500: #71717a;
+  --color-gray-600: #52525b;
+  --color-gray-700: #393a42;
+  --color-gray-800: #1e2027;
+  --color-gray-900: #14151a;
+  --color-gray-950: #0c0d10;
+  --color-zinc-600: #52525b;
+}
+
+:root[data-theme="warm-oat"] {
+  color-scheme: light;
+  --bg-app: #f5f2eb;
+  --bg-surface: #faf8f5;
+  --bg-elevated: #e6dfd5;
+  --border-subtle: #e2dbd0;
+  --text-main: #2c2621;
+  --text-muted: #7c7369;
+  --color-white: #faf8f5;
+  --color-gray-50: #faf8f5;
+  --color-gray-100: #f5f2eb;
+  --color-gray-200: #e2dbd0;
+  --color-gray-300: #d2c7b8;
+  --color-gray-400: #a99f94;
+  --color-gray-500: #7c7369;
+  --color-gray-600: #62584f;
+  --color-gray-700: #493f37;
+  --color-gray-800: #352c25;
+  --color-gray-900: #2c2621;
+  --color-gray-950: #201a16;
+  --color-zinc-600: #a99f94;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg-app);
+  color: var(--text-main);
+  font-family: var(
+    --app-font-family,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif
+  );
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+.view-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  padding: 0.25rem;
+}
+
+.settings-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-elevated) transparent;
+}
+
+.settings-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: var(--bg-elevated);
+}
+
+.view-tab {
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition:
+    color 100ms ease,
+    background-color 100ms ease;
+}
+
+.view-tab:hover {
+  color: var(--text-main);
+}
+
+.view-tab[aria-selected="true"] {
+  background: var(--bg-elevated);
+  color: var(--text-main);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+.instance-badge {
+  display: inline-flex;
+  max-width: min(22rem, 42vw);
+  align-items: center;
+  gap: 0.375rem;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  background: var(--bg-surface);
+  padding: 0.3rem 0.625rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  transition:
+    color 100ms ease,
+    background-color 100ms ease;
+}
+
+.instance-badge:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-main);
+}
+
+.mod-table {
+  font-size: var(--app-font-size, 16px);
+}
+
+.mod-table thead,
+.mod-table .font-mono.text-xs {
+  font-size: calc(var(--app-font-size, 16px) * 0.75);
+}
+
+.mod-table svg {
+  width: var(--app-icon-size, 20px);
+  height: var(--app-icon-size, 20px);
+  flex: none;
+}
+
+.mod-table .mod-table-scaled {
+  font-size: var(--app-font-size, 16px);
+}
+
+.mod-table .mod-table-badge {
+  font-size: calc(var(--app-font-size, 16px) * 0.75);
+  line-height: 1.2;
+}
+
+[data-app-scale="true"] button {
+  min-height: calc(var(--app-icon-size, 20px) + 0.5rem);
+  font-size: var(--app-font-size, 16px);
+}
+
+[data-app-scale="true"] svg {
+  width: var(--app-icon-size, 20px);
+  height: var(--app-icon-size, 20px);
+  flex: none;
+}
