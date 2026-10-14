@@ -12,6 +12,7 @@ import {
   FolderOpen,
   Github,
   LoaderCircle,
+  MessageCircle,
   Palette,
   Plus,
   Settings2,
@@ -27,11 +28,12 @@ import type {
 } from "../../../shared/types";
 import ThemeGuideModal from "./ThemeGuideModal";
 
-// Update these two values when the project profile and Discord handle are ready.
+// Creator profile links and Discord identity shown on the home screen.
 const CREATOR_SOCIALS = {
   name: "Star Cage",
-  github: "https://github.com",
-  discord: "star_cage",
+  github: "https://github.com/Starcage1/StarTools---Modpack-Management",
+  discordUsername: "starcage",
+  discordUserId: "751000949732016128",
 };
 
 interface HomeScreenProps {
@@ -81,7 +83,6 @@ function HomeScreen({
   const [crashReportsInstanceId, setCrashReportsInstanceId] = useState<
     string | null
   >(null);
-  const [copiedDiscord, setCopiedDiscord] = useState(false);
   const [isThemeGuideOpen, setIsThemeGuideOpen] = useState(false);
   const selectedInstance = useMemo(
     () =>
@@ -218,16 +219,6 @@ function HomeScreen({
     }
   };
 
-  const copyDiscord = async (): Promise<void> => {
-    try {
-      await window.api.copyText(CREATOR_SOCIALS.discord);
-      setCopiedDiscord(true);
-      window.setTimeout(() => setCopiedDiscord(false), 1400);
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-main)]">
       <header className="relative z-10 flex h-14 items-center justify-between border-b border-zinc-800/80 px-5">
@@ -246,14 +237,14 @@ function HomeScreen({
           <button
             type="button"
             onClick={() => setIsThemeGuideOpen(true)}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 transition hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:bg-cyan-300 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
           >
             <Palette size={14} /> Style Guide
           </button>
           <button
             type="button"
             onClick={onSettings}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 transition hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-zinc-800 px-3 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:bg-cyan-300 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
           >
             <Settings2 size={14} /> Settings
           </button>
@@ -401,20 +392,16 @@ function HomeScreen({
                 >
                   <Github size={15} />
                 </a>
-                <button
-                  type="button"
-                  onClick={() => void copyDiscord()}
-                  title={copiedDiscord ? "Copied!" : "Copy Discord handle"}
-                  aria-label="Copy Discord handle"
-                  className="relative rounded-md p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+                <a
+                  href={`https://discord.com/users/${CREATOR_SOCIALS.discordUserId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Discord: ${CREATOR_SOCIALS.discordUsername}`}
+                  aria-label={`Open Discord profile for ${CREATOR_SOCIALS.discordUsername}`}
+                  className="rounded-md p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
                 >
-                  <Clipboard size={15} />
-                  {copiedDiscord && (
-                    <span className="absolute -top-7 right-0 rounded bg-zinc-800 px-2 py-1 text-[10px] text-white shadow">
-                      Copied!
-                    </span>
-                  )}
-                </button>
+                  <MessageCircle size={15} />
+                </a>
               </div>
             </div>
           </div>

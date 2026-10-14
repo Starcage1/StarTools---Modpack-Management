@@ -2,10 +2,14 @@
   "name": "startools-modpack-manager",
   "productName": "StarTools - Modpack Manager",
   "version": "0.5.0",
-  "description": "StarTools Minecraft Modpack Manager",
+  "description": "A high-density modpack manager and developer companion tool.",
   "main": "./out/main/index.js",
-  "author": "",
-  "homepage": "https://electron-vite.org",
+  "author": "Star Cage",
+  "homepage": "https://github.com/starcage/startools-modpack-manager#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/starcage/startools-modpack-manager.git"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

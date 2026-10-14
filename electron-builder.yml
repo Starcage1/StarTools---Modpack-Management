@@ -1,4 +1,4 @@
-appId: com.modpacktool.app
+appId: com.starcage.startools
 productName: StarTools - Modpack Manager
 directories:
   buildResources: build
@@ -54,6 +54,3 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
