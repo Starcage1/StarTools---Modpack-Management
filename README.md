@@ -56,6 +56,7 @@ Check out the **[Releases](../../releases)** tab for the pre-built Windows files
 
 - **Portable (`StarTools-Portable-0.5.0.exe`):** Recommended. No installation needed—just drop it anywhere and run it.
 - **Installer (`StarTools-Setup-0.5.0.exe`):** Standard Windows installer if you prefer start menu shortcuts.
+- Platform: Windows 10 / 11 (64-bit) only. (Linux/macOS builds are not currently supported).
 
 ### ℹ️ Note on Windows SmartScreen
 Because I don't pay hundreds of dollars a year for a corporate Microsoft code-signing certificate, Windows SmartScreen will show a blue *"Windows protected your PC (Unknown Publisher)"* popup when you run it.  
