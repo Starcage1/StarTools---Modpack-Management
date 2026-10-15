@@ -55,7 +55,7 @@ function GuideContent({ tab }: { tab: GuideTab }): React.JSX.Element {
           <code className={codeClass}>
             %appdata%/startools-modpack-manager/themes/
           </code>{" "}
-          (Click <strong>Open Themes Folder</strong> above).
+          (Click <strong>Open Themes Folder</strong> in the settings tab).
         </p>
         <h3 className="mt-6 font-semibold text-zinc-100">How it works:</h3>
         <ol className="mt-2 list-inside list-decimal space-y-2">

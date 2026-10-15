@@ -6,8 +6,8 @@ import {
   dialog,
   clipboard,
 } from "electron";
+import { appendFileSync, lstatSync, mkdirSync, readdirSync, statSync } from "fs";
 import { basename, join, resolve, sep } from "path";
-import { lstatSync, readdirSync, statSync } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { scanModsFolder } from "./modParser";
 import { getLastFolder, saveLastFolder } from "./config";
@@ -65,6 +65,55 @@ import type {
 } from "../shared/types";
 
 let mainWindow: BrowserWindow | null = null;
+
+function crashErrorText(error: unknown): string {
+  if (error instanceof Error) return error.stack || error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function logCrash(type: string, error: unknown): string | null {
+  try {
+    const logDir = app.getPath("userData");
+    const logPath = join(logDir, "crash.log");
+    mkdirSync(logDir, { recursive: true });
+    appendFileSync(
+      logPath,
+      `[${new Date().toISOString()}] [${type}] ${crashErrorText(error)}\n\n`,
+      "utf8",
+    );
+    return logPath;
+  } catch (writeError) {
+    console.error("Failed to write crash log", writeError);
+    return null;
+  }
+}
+
+process.on("uncaughtException", (error) => {
+  const logPath = logCrash("UNCAUGHT_EXCEPTION", error);
+  const logLocation = logPath
+    ? `A crash log was saved to:\n${logPath}`
+    : "The crash log could not be saved.";
+  try {
+    dialog.showErrorBox(
+      "StarTools Unexpected Error",
+      `An unexpected error occurred:\n${error.message}\n\n${logLocation}`,
+    );
+  } catch (dialogError) {
+    console.error("Failed to show crash dialog", dialogError);
+  } finally {
+    // An uncaught exception leaves the main process in an unknown state.
+    app.exit(1);
+  }
+});
+
+process.on("unhandledRejection", (reason) => {
+  logCrash("UNHANDLED_REJECTION", reason);
+});
 
 /** Push the current restorable count so the Restore button updates live. */
 function broadcastTrashCount(): void {

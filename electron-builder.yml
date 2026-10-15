@@ -15,7 +15,7 @@ extraResources:
 asarUnpack:
   - resources/**
 win:
-  executableName: startools-modpack-manager
+  executableName: startools-modpack-manager-win64x
   icon: build/logo.ico
   target:
     - target: nsis
@@ -25,7 +25,7 @@ win:
       arch:
         - x64
 nsis:
-  artifactName: ${productName}-${version}-setup.${ext}
+  artifactName: ${productName}-${version}-win64x-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
@@ -33,7 +33,7 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
 portable:
-  artifactName: ${productName}-${version}-portable.${ext}
+  artifactName: ${productName}-${version}-win64x-portable.${ext}
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
