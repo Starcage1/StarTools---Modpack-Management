@@ -30,6 +30,15 @@ StarTools brings all of that into one lightweight workspace.
   - Flags missing or optional dependencies with warning badges.
   - Detects environments (`Client`, `Server`, or `Both`).
   - Fetches project icons, links, and tags from Modrinth using file hashes.
+  - Parses Fabric mod metadata and warns when Fabric mods may not run in Forge/NeoForge packs without Sinytra Connector.
+- **Registry Explorer & Duplicate Checker:**
+  - Scans enabled mod JAR assets for items, blocks, biomes, dimensions, and mobs.
+  - Finds cross-mod collisions by display name or registry ID, with filters for same-mod variants and vanilla backports.
+- **Direct Modpack Sync (Beta):**
+  - Compare two modlists over LAN or Radmin VPN, then choose which missing or mismatched mods to push or pull.
+  - Transfers run one at a time and verify file hashes before adding a mod to the instance.
+  - No cloud relay is used; files are sent directly between the two players when a transfer is chosen.
+- **Modpack Reports:** Export selected modlist metadata, registry collisions, compatibility warnings, and missing dependencies as Markdown, CSV, or JSON.
 - **Built-in Config Editor:**
   - Embedded Monaco code editor (same engine as VS Code).
   - Syntax highlighting for `.toml`, `.json`, `.json5`, `.cfg`, and `.yaml`.
@@ -66,8 +75,9 @@ This is standard for free, unsigned open-source tools: just click **"More info"*
 
 ## 🔒 Privacy & Network
 
-- **Mod Lookups:** When you click *"Fetch Online Data"*, StarTools calculates anonymous **SHA-1 hashes** of your `.jar` files and checks them against the public [Modrinth API](https://docs.modrinth.com/).
-- **Zero File Uploads:** No local files, personal data, instance paths, or configs are ever uploaded anywhere.
+- **Mod Lookups:** When you click *"Fetch Online Data"*, StarTools calculates **SHA-1 hashes** of your `.jar` files and checks them against the public [Modrinth API](https://docs.modrinth.com/). Mod archives and config files are not uploaded for these lookups.
+- **Direct Sync:** Sync is separate from Modrinth. If you choose to push a mod, its archive is sent directly to the connected peer over your LAN or VPN; StarTools does not use a third-party cloud relay.
+- **Local Data:** Instance paths, configs, and reports stay on your computer unless you explicitly choose to transfer or share them.
 
 ---
 
