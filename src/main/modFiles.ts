@@ -1,8 +1,9 @@
 import { spawn } from "child_process";
+import { shell } from "electron";
 import { existsSync, mkdirSync, renameSync, statSync } from "fs";
 import { basename, join, resolve } from "path";
 import { nextStagedPath, recordTrashEntry } from "./trashHistory";
-import { detectNanaZipPath, normalizeNanaZipPath } from "./nanaZip";
+import { resolveArchiveGuiCandidates } from "./nanaZip";
 
 export const MODS_DIR_NAME = "mods";
 export const DISABLED_DIR_NAME = "disabledmods";
@@ -122,7 +123,7 @@ export function resolveArchivePath(filePath: string): string {
   return full;
 }
 
-/** Open a mod archive directly in NanaZip. */
+/** Open an archive in a GUI archiver, falling back to the OS file association. */
 export async function openArchiveWithNanaZip(
   filePath: string,
   configuredPath?: string,
@@ -132,31 +133,28 @@ export async function openArchiveWithNanaZip(
     throw new Error("Open Archive with NanaZip is only available on Windows");
   }
 
-  const nanaZipPath = configuredPath
-    ? normalizeNanaZipPath(configuredPath)
-    : detectNanaZipPath();
-  const isStoreAlias = nanaZipPath === "NanaZip.exe";
-  if (
-    !nanaZipPath ||
-    (!isStoreAlias &&
-      (!existsSync(nanaZipPath) || !statSync(nanaZipPath).isFile()))
-  ) {
-    throw new Error(
-      "NanaZip was not found. Set its executable path in Settings.",
-    );
+  const candidates = resolveArchiveGuiCandidates(configuredPath);
+  for (const executable of candidates) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(executable, [full], {
+          detached: true,
+          windowsHide: false,
+          stdio: "ignore",
+        });
+        child.once("error", reject);
+        child.once("spawn", () => {
+          child.unref();
+          resolve();
+        });
+      });
+      return true;
+    } catch (error) {
+      console.warn(`[ArchiveOpener] Could not start ${executable}:`, error);
+    }
   }
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(nanaZipPath, [full], {
-      detached: true,
-      windowsHide: false,
-      stdio: "ignore",
-    });
-    child.once("error", reject);
-    child.once("spawn", () => {
-      child.unref();
-      resolve();
-    });
-  });
+  const openError = await shell.openPath(full);
+  if (openError) throw new Error(`Could not open archive: ${openError}`);
   return true;
 }

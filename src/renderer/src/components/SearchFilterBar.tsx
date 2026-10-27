@@ -1,8 +1,9 @@
-import { Download, History, Search } from "lucide-react";
+import { History, Search } from "lucide-react";
 
 export type SideFilter = "All" | "Client" | "Server" | "Both";
 export type StatusFilter = "All" | "Enabled" | "Disabled";
-export type WarningFilter = "All" | "MissingMandatory" | "OptionalOnly";
+export type WarningFilter =
+  "All" | "MissingMandatory" | "OptionalOnly" | "IncompatibleFabric";
 
 interface SearchFilterBarProps {
   query: string;
@@ -13,11 +14,10 @@ interface SearchFilterBarProps {
   onStatusFilterChange: (status: StatusFilter) => void;
   warningFilter: WarningFilter;
   onWarningFilterChange: (warning: WarningFilter) => void;
+  incompatibleFabricCount: number;
   restorableCount: number;
   restoring: boolean;
   onRestore: () => void;
-  exporting: boolean;
-  onExport: () => void;
 }
 
 const SIDE_OPTIONS: SideFilter[] = ["All", "Client", "Server", "Both"];
@@ -30,6 +30,7 @@ const WARNING_OPTIONS: { value: WarningFilter; label: string }[] = [
   { value: "All", label: "Warnings: All" },
   { value: "MissingMandatory", label: "Missing Mandatory Only" },
   { value: "OptionalOnly", label: "Optional Dependencies Only" },
+  { value: "IncompatibleFabric", label: "Incompatible Fabric Only" },
 ];
 
 function SearchFilterBar({
@@ -41,11 +42,10 @@ function SearchFilterBar({
   onStatusFilterChange,
   warningFilter,
   onWarningFilterChange,
+  incompatibleFabricCount,
   restorableCount,
   restoring,
   onRestore,
-  exporting,
-  onExport,
 }: SearchFilterBarProps): React.JSX.Element {
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -100,6 +100,22 @@ function SearchFilterBar({
       </select>
       <button
         type="button"
+        disabled={incompatibleFabricCount === 0}
+        aria-pressed={warningFilter === "IncompatibleFabric"}
+        onClick={() =>
+          onWarningFilterChange(
+            warningFilter === "IncompatibleFabric"
+              ? "All"
+              : "IncompatibleFabric",
+          )
+        }
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-sm shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${warningFilter === "IncompatibleFabric" ? "border-amber-500/50 bg-amber-950/40 text-amber-200" : "border-amber-800/40 text-amber-300 hover:bg-amber-950/30"}`}
+        title="Show Fabric mods that need Sinytra Connector on Forge/NeoForge"
+      >
+        Incompatible Fabric ({incompatibleFabricCount})
+      </button>
+      <button
+        type="button"
         onClick={onRestore}
         disabled={restoring || restorableCount === 0}
         title={
@@ -111,16 +127,6 @@ function SearchFilterBar({
       >
         <History size={14} />
         Restore Items{restorableCount > 0 ? ` (${restorableCount})` : ""}
-      </button>
-      <button
-        type="button"
-        onClick={onExport}
-        disabled={exporting || restoring}
-        title="Export the current modpack info to Markdown"
-        className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-      >
-        <Download size={14} />
-        {exporting ? "Exporting…" : "Export Modpack Info"}
       </button>
     </div>
   );

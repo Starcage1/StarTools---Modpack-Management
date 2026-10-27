@@ -1,4 +1,4 @@
-# StarTools — Modpack Manager (v0.5.0 Beta)
+# StarTools — Modpack Manager (v0.6.0 Beta)
 
 Hey! StarTools is a personal desktop companion tool I put together to make creating, auditing, and tweaking Minecraft modpacks a lot less annoying than digging through file explorer windows. 
 
@@ -7,7 +7,7 @@ I built it primarily for my own modpack development workflow, but I'm sharing it
 ---
 
 > ⚠️ **A quick heads-up before using:**  
-> This is a **personal hobby project**, not an enterprise product or commercial software. It's in active beta (`v0.5.0`), developed in my spare time, so expect occasional rough edges or quirks. Feel free to try it out, but **please always back up your instances and saves first!**
+> This is a **personal hobby project**, not an enterprise product or commercial software. It's in active beta (`v0.6.0`), developed in my spare time, so expect occasional rough edges or quirks. Feel free to try it out, but **please always back up your instances and saves first!**
 
 ---
 
@@ -54,8 +54,8 @@ StarTools brings all of that into one lightweight workspace.
 
 Check out the **[Releases](../../releases)** tab for the pre-built Windows files:
 
-- **Portable (`StarTools-Portable-0.5.0.exe`):** Recommended. No installation needed—just drop it anywhere and run it.
-- **Installer (`StarTools-Setup-0.5.0.exe`):** Standard Windows installer if you prefer start menu shortcuts.
+- **Portable (`StarTools - Modpack Manager-0.6.0-win64x-portable.exe`):** Recommended. No installation needed—just drop it anywhere and run it.
+- **Installer (`StarTools - Modpack Manager-0.6.0-win64x-setup.exe`):** Standard Windows installer if you prefer start menu shortcuts.
 - Platform: Windows 10 / 11 (64-bit) only. (Linux/macOS builds are not currently supported).
 
 ### ℹ️ Note on Windows SmartScreen

@@ -32,6 +32,7 @@ coverage/
 userData/
 snapshots/
 trash_staging/
+.sync_staging/
 
 # Secrets and machine-local environment files
 .env

@@ -8,8 +8,12 @@ import {
   type AppFontFamily,
   type AppSettings,
   type DisabledPlacement,
+  type IncompatibleFabricPlacement,
   type TableFontSetting,
   type ThemeSetting,
+  type StartupWindowMode,
+  type SearchInputDebounceMs,
+  type SyncBufferSizeKb,
 } from "../shared/types";
 
 function userDataDir(): string | null {
@@ -48,6 +52,12 @@ function isPlacement(value: unknown): value is DisabledPlacement {
   return value === "end" || value === "start";
 }
 
+function isIncompatibleFabricPlacement(
+  value: unknown,
+): value is IncompatibleFabricPlacement {
+  return value === "end" || value === "start" || value === "alphabetical";
+}
+
 function isFontFamily(value: unknown): value is AppFontFamily {
   return value === "sans" || value === "mono" || value === "serif";
 }
@@ -56,6 +66,22 @@ function isLandingScreen(
   value: unknown,
 ): value is AppSettings["landingScreen"] {
   return value === "home" || value === "last-instance";
+}
+
+function isStartupWindowMode(value: unknown): value is StartupWindowMode {
+  return (
+    value === "windowed" || value === "maximized" || value === "fullscreen"
+  );
+}
+
+function isSearchInputDebounceMs(
+  value: unknown,
+): value is SearchInputDebounceMs {
+  return value === 100 || value === 150 || value === 250;
+}
+
+function isSyncBufferSizeKb(value: unknown): value is SyncBufferSizeKb {
+  return value === 512 || value === 1024 || value === 2048;
 }
 
 function sanitize(raw: unknown): AppSettings {
@@ -81,12 +107,20 @@ function sanitize(raw: unknown): AppSettings {
     disabledPlacement: isPlacement(obj.disabledPlacement)
       ? obj.disabledPlacement
       : DEFAULT_SETTINGS.disabledPlacement,
+    incompatibleFabricPlacement: isIncompatibleFabricPlacement(
+      obj.incompatibleFabricPlacement,
+    )
+      ? obj.incompatibleFabricPlacement
+      : DEFAULT_SETTINGS.incompatibleFabricPlacement,
     fontFamily: isFontFamily(obj.fontFamily)
       ? obj.fontFamily
       : DEFAULT_SETTINGS.fontFamily,
     landingScreen: isLandingScreen(obj.landingScreen)
       ? obj.landingScreen
       : DEFAULT_SETTINGS.landingScreen,
+    startupWindowMode: isStartupWindowMode(obj.startupWindowMode)
+      ? obj.startupWindowMode
+      : DEFAULT_SETTINGS.startupWindowMode,
     confirmTrashMods:
       typeof obj.confirmTrashMods === "boolean"
         ? obj.confirmTrashMods
@@ -95,6 +129,31 @@ function sanitize(raw: unknown): AppSettings {
       typeof obj.promptDeleteAssociatedConfigs === "boolean"
         ? obj.promptDeleteAssociatedConfigs
         : DEFAULT_SETTINGS.promptDeleteAssociatedConfigs,
+    crossModOnlyCollisions:
+      typeof obj.crossModOnlyCollisions === "boolean"
+        ? obj.crossModOnlyCollisions
+        : DEFAULT_SETTINGS.crossModOnlyCollisions,
+    ignoreVanillaBackportDuplicates:
+      typeof obj.ignoreVanillaBackportDuplicates === "boolean"
+        ? obj.ignoreVanillaBackportDuplicates
+        : DEFAULT_SETTINGS.ignoreVanillaBackportDuplicates,
+    syncPort:
+      typeof obj.syncPort === "number" &&
+      Number.isInteger(obj.syncPort) &&
+      obj.syncPort >= 1024 &&
+      obj.syncPort <= 65535
+        ? obj.syncPort
+        : DEFAULT_SETTINGS.syncPort,
+    autoDetectRadmin:
+      typeof obj.autoDetectRadmin === "boolean"
+        ? obj.autoDetectRadmin
+        : DEFAULT_SETTINGS.autoDetectRadmin,
+    syncBufferSizeKb: isSyncBufferSizeKb(obj.syncBufferSizeKb)
+      ? obj.syncBufferSizeKb
+      : DEFAULT_SETTINGS.syncBufferSizeKb,
+    searchInputDebounceMs: isSearchInputDebounceMs(obj.searchInputDebounceMs)
+      ? obj.searchInputDebounceMs
+      : DEFAULT_SETTINGS.searchInputDebounceMs,
     ...(nanaZipPath !== undefined ? { nanaZipPath } : {}),
     ...(vsCodePath !== undefined ? { vsCodePath } : {}),
     ...(customThemeId !== undefined ? { customThemeId } : {}),

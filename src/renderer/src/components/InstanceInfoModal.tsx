@@ -25,7 +25,7 @@ function InstanceInfoModal({
         { label: "Source", value: info.sourceFile || "none found" },
         {
           label: "StarTools - Modpack Manager",
-          value: `v${appVersion || "0.5.0"}`,
+          value: `v${appVersion || "0.6.0"} Beta`,
         },
       ]
     : [];

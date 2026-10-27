@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
+  Download,
   Folder,
   Home,
   Info,
+  Package,
   PackageSearch,
+  FileCode,
+  FolderArchive,
+  Database,
+  RefreshCw,
   Settings as SettingsIcon,
+  X,
 } from "lucide-react";
 import {
   APP_FONT_STACKS,
@@ -37,6 +44,8 @@ import InstanceInfoModal from "./components/InstanceInfoModal";
 import ModTable, { type SortDir, type SortKey } from "./components/ModTable";
 import Pagination from "./components/Pagination";
 import PacksView from "./components/PacksView";
+import RegistryScreen from "./components/RegistryScreen";
+import SyncTab from "./components/SyncTab";
 import SearchFilterBar, {
   type SideFilter,
   type StatusFilter,
@@ -45,6 +54,7 @@ import SearchFilterBar, {
 import SettingsModal from "./components/SettingsModal";
 import HomeScreen, { InstanceLoadingScreen } from "./components/HomeScreen";
 import SnapshotManagerModal from "./components/SnapshotManagerModal";
+import ExportModal from "./components/ExportModal";
 
 const PAGE_SIZE = 20;
 
@@ -90,14 +100,15 @@ function App(): React.JSX.Element {
   const [appVersion, setAppVersion] = useState("");
   const [customThemes, setCustomThemes] = useState<CustomTheme[]>([]);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [isSwitchingInstance, setIsSwitchingInstance] = useState(false);
   const [switchingInstanceName, setSwitchingInstanceName] = useState("");
   const [switchingStage, setSwitchingStage] = useState<
     ScanProgressStage | "ready"
   >("reading");
-  const [activeTab, setActiveTab] = useState<"modlist" | "config" | "packs">(
-    "modlist",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "modlist" | "sync" | "config" | "packs" | "registry"
+  >("modlist");
   const [instancePath, setInstancePath] = useState<string | null>(null);
   const [result, setResult] = useState<ScanModsResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -109,6 +120,9 @@ function App(): React.JSX.Element {
   const [sideFilter, setSideFilter] = useState<SideFilter>("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [warningFilter, setWarningFilter] = useState<WarningFilter>("All");
+  const [fabricNoticeDismissedFor, setFabricNoticeDismissedFor] = useState<
+    string | null
+  >(null);
   const [editingModId, setEditingModId] = useState<string | null>(null);
   const [editingCatsModId, setEditingCatsModId] = useState<string | null>(null);
   const [catOverrides, setCatOverrides] = useState<CatOverrides>({});
@@ -129,7 +143,6 @@ function App(): React.JSX.Element {
   const [fetchingOnline, setFetchingOnline] = useState(false);
   const [fetchProgress, setFetchProgress] =
     useState<OnlineFetchProgress | null>(null);
-  const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingConfigDelete, setPendingConfigDelete] = useState<{
     mod: ParsedMod;
@@ -390,6 +403,16 @@ function App(): React.JSX.Element {
       const saved = await window.api.saveManagedInstance(picked);
       setManagedInstances(await window.api.listManagedInstances());
       setToast(`${saved.name} added to your instances.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleTrackInstance = async (instancePath: string): Promise<void> => {
+    try {
+      const tracked = await window.api.saveManagedInstance(instancePath);
+      setManagedInstances(await window.api.listManagedInstances());
+      setToast(`${tracked.name} added to your instances.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -662,20 +685,6 @@ function App(): React.JSX.Element {
     }
   };
 
-  const handleExport = async (): Promise<void> => {
-    if (!instancePath || exporting || loading) return;
-    setError(null);
-    setExporting(true);
-    try {
-      await window.api.exportModpackInfo(instancePath);
-      setToast("Modpack info exported to \\export\\modlist_export.md");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const updateSettings = (patch: Partial<AppSettings>): void => {
     const previous = settings;
     // Optimistic apply; the effect above paints theme/font immediately.
@@ -828,6 +837,8 @@ function App(): React.JSX.Element {
       ) {
         return false;
       }
+      if (warningFilter === "IncompatibleFabric" && !m.incompatibleFabric)
+        return false;
       if (!q) return true;
       return (
         m.name.toLowerCase().includes(q) ||
@@ -839,7 +850,9 @@ function App(): React.JSX.Element {
 
   const sortedMods = useMemo(() => {
     const base = !sortKey
-      ? filteredMods
+      ? settings.incompatibleFabricPlacement === "alphabetical"
+        ? [...filteredMods].sort((a, b) => a.name.localeCompare(b.name))
+        : filteredMods
       : [...filteredMods].sort(
           (a, b) =>
             a[sortKey].localeCompare(b[sortKey]) * (sortDir === "asc" ? 1 : -1),
@@ -853,8 +866,28 @@ function App(): React.JSX.Element {
         : enabled
           ? 1
           : 0;
-    return [...base].sort((a, b) => rank(a.enabled) - rank(b.enabled));
-  }, [filteredMods, sortKey, sortDir, settings.disabledPlacement]);
+    return [...base].sort((a, b) => {
+      if (settings.incompatibleFabricPlacement !== "alphabetical") {
+        const aIsIncomp = Boolean(a.incompatibleFabric);
+        const bIsIncomp = Boolean(b.incompatibleFabric);
+        if (aIsIncomp !== bIsIncomp) {
+          if (settings.incompatibleFabricPlacement === "end") {
+            return aIsIncomp ? 1 : -1;
+          }
+          if (settings.incompatibleFabricPlacement === "start") {
+            return aIsIncomp ? -1 : 1;
+          }
+        }
+      }
+      return rank(a.enabled) - rank(b.enabled);
+    });
+  }, [
+    filteredMods,
+    sortKey,
+    sortDir,
+    settings.disabledPlacement,
+    settings.incompatibleFabricPlacement,
+  ]);
 
   const isFiltering =
     query.trim().length > 0 ||
@@ -872,6 +905,18 @@ function App(): React.JSX.Element {
     result?.mods.filter((m) =>
       m.dependencies.some((d) => d.mandatory && !d.satisfied && !d.removed),
     ).length ?? 0;
+  const incompatibleFabricCount =
+    result?.mods.filter((mod) => mod.incompatibleFabric).length ?? 0;
+  const fabricApiMissing = Boolean(
+    result?.modLoader.toLowerCase().includes("fabric") &&
+    !result.mods.some(
+      (mod) =>
+        mod.enabled &&
+        ["fabric-api", "fabric", "fabric-api-base", "fabricapi"].includes(
+          mod.modId.toLowerCase(),
+        ),
+    ),
+  );
   const disabledCount = result?.mods.filter((m) => !m.enabled).length ?? 0;
   const editingMod = editingModId
     ? (result?.mods.find((m) => m.modId === editingModId) ?? null)
@@ -915,6 +960,7 @@ function App(): React.JSX.Element {
           appVersion={appVersion}
           loading={loading || isSwitchingInstance}
           onAdd={() => void handleAddInstance()}
+          onTrack={handleTrackInstance}
           onOpen={(instance) => void handleOpenManagedInstance(instance)}
           onUntrack={(instance) => void handleUntrackInstance(instance)}
           onSettings={() => setSettingsOpen(true)}
@@ -934,7 +980,7 @@ function App(): React.JSX.Element {
               if (path) updateSettings({ nanaZipPath: path });
               else
                 setError(
-                  "NanaZip was not found. Use Browse to select NanaZip.exe.",
+                  "NanaZip's GUI was not found. Install NanaZip with NanaZipG.exe, or use the detected 7-Zip / Windows archive app.",
                 );
             }}
             onBrowseVSCode={async () => {
@@ -1060,7 +1106,18 @@ function App(): React.JSX.Element {
                 onClick={() => setActiveTab("modlist")}
                 className="view-tab"
               >
-                Modlist
+                <Package className="mr-2 h-4 w-4" />
+                Mods
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "sync"}
+                onClick={() => setActiveTab("sync")}
+                className="view-tab"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Sync
               </button>
               <button
                 type="button"
@@ -1069,7 +1126,8 @@ function App(): React.JSX.Element {
                 onClick={() => setActiveTab("config")}
                 className="view-tab"
               >
-                Config
+                <FileCode className="mr-2 h-4 w-4" />
+                Configs
               </button>
               <button
                 type="button"
@@ -1078,7 +1136,18 @@ function App(): React.JSX.Element {
                 onClick={() => setActiveTab("packs")}
                 className="view-tab"
               >
+                <FolderArchive className="mr-2 h-4 w-4" />
                 Packs
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "registry"}
+                onClick={() => setActiveTab("registry")}
+                className="view-tab"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                Registry
               </button>
             </div>
           </div>
@@ -1092,6 +1161,16 @@ function App(): React.JSX.Element {
               onRefresh={handleRefresh}
               onFetchOnline={() => void handleFetchOnline()}
             />
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              disabled={!instancePath || !result || loading}
+              title="Export Modpack Report"
+              aria-label="Export Modpack Report"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              <Download size={15} /> Export
+            </button>
             <button
               type="button"
               onClick={() => setSnapshotsOpen(true)}
@@ -1167,6 +1246,27 @@ function App(): React.JSX.Element {
             </div>
           )}
 
+          {fabricApiMissing &&
+            instancePath &&
+            fabricNoticeDismissedFor !== instancePath && (
+              <div className="mb-2 flex items-center gap-2 rounded-md border border-amber-800/40 bg-amber-950/30 px-3 py-1.5 text-xs text-amber-300">
+                <Info size={14} className="shrink-0" />
+                <span className="min-w-0 flex-1">
+                  Fabric API is not detected in this instance. Most Fabric mods
+                  require Fabric API to launch.
+                </span>
+                <button
+                  type="button"
+                  aria-label="Dismiss Fabric API notice for this session"
+                  title="Dismiss for this session"
+                  onClick={() => setFabricNoticeDismissedFor(instancePath)}
+                  className="shrink-0 rounded p-1 text-amber-300/80 hover:bg-amber-900/50 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+
           {result && (
             <SearchFilterBar
               query={query}
@@ -1189,11 +1289,10 @@ function App(): React.JSX.Element {
                 setWarningFilter(w);
                 setPage(1);
               }}
+              incompatibleFabricCount={incompatibleFabricCount}
               restorableCount={restorableCount}
               restoring={restoring || loading}
               onRestore={() => void handleRestore()}
-              exporting={exporting}
-              onExport={() => void handleExport()}
             />
           )}
 
@@ -1220,6 +1319,10 @@ function App(): React.JSX.Element {
             onOpenArchive={(mod) => void handleOpenArchive(mod)}
             onOpenConfig={(mod) => void handleOpenModConfig(mod)}
             onOpenConfigInVSCode={(mod) => void handleOpenModConfig(mod, true)}
+            forgeFamilyInstance={/^(forge|neoforge)$/i.test(
+              result?.modLoader ?? "",
+            )}
+            sinytraConnectorActive={Boolean(result?.hasSinytraConnector)}
             emptyHint={
               result ? "No mods match the current search or filter." : undefined
             }
@@ -1276,6 +1379,17 @@ function App(): React.JSX.Element {
           )}
         </div>
 
+        <div className={activeTab === "sync" ? "" : "hidden"}>
+          <SyncTab
+            key={instancePath ?? "no-instance"}
+            instancePath={instancePath}
+            defaultPort={settings.syncPort}
+            searchDebounceMs={settings.searchInputDebounceMs}
+            onNotify={setToast}
+            onError={setError}
+          />
+        </div>
+
         <div className={activeTab === "config" ? "" : "hidden"}>
           <ConfigView
             key={instancePath ?? "no-instance"}
@@ -1299,6 +1413,22 @@ function App(): React.JSX.Element {
             instancePath={instancePath}
             active={activeTab === "packs"}
             onOpenArchive={handleOpenPackArchive}
+          />
+        </div>
+
+        <div className={activeTab === "registry" ? "" : "hidden"}>
+          <RegistryScreen
+            key={instancePath ?? "no-instance"}
+            instancePath={instancePath}
+            active={activeTab === "registry"}
+            crossModOnlyDefault={settings.crossModOnlyCollisions}
+            onCrossModOnlyChange={(enabled) =>
+              updateSettings({ crossModOnlyCollisions: enabled })
+            }
+            ignoreVanillaBackports={settings.ignoreVanillaBackportDuplicates}
+            searchDebounceMs={settings.searchInputDebounceMs}
+            onError={setError}
+            onNotify={setToast}
           />
         </div>
 
@@ -1345,7 +1475,7 @@ function App(): React.JSX.Element {
               if (path) updateSettings({ nanaZipPath: path });
               else
                 setError(
-                  "NanaZip was not found. Use Browse to select NanaZip.exe.",
+                  "NanaZip's GUI was not found. Install NanaZip with NanaZipG.exe, or use the detected 7-Zip / Windows archive app.",
                 );
             }}
             onBrowseVSCode={async () => {
@@ -1377,6 +1507,19 @@ function App(): React.JSX.Element {
               }
             }}
             onClose={() => setSettingsOpen(false)}
+          />
+        )}
+        {exportOpen && instancePath && result && (
+          <ExportModal
+            instancePath={instancePath}
+            mods={result.mods}
+            loader={result.modLoader}
+            minecraftVersion={instanceInfo?.minecraftVersion ?? "Unknown"}
+            crossModOnly={settings.crossModOnlyCollisions}
+            ignoreVanillaBackports={settings.ignoreVanillaBackportDuplicates}
+            onClose={() => setExportOpen(false)}
+            onNotify={setToast}
+            onError={setError}
           />
         )}
         {snapshotsOpen && instancePath && (

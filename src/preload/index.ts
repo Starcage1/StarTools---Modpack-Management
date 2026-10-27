@@ -10,6 +10,7 @@ import type {
   ConfigModMatch,
   ConfigTreeEntry,
   CustomTheme,
+  DetectedLauncherInstance,
   DepOverrideEntry,
   DepOverrides,
   InstanceInfo,
@@ -20,11 +21,21 @@ import type {
   PackTextDocument,
   PacksScanResult,
   RestoreResult,
+  RegistryAssetRequest,
+  RegistryAssetResult,
+  RegistryExportAssetRequest,
+  RegistryScanProgress,
+  RegistryScanResult,
   ScanModsResult,
   ScanProgressStage,
   SideOverride,
   SnapshotEntry,
   SnapshotRollbackResult,
+  SyncConnection,
+  SyncDiffSummary,
+  SyncEvent,
+  SyncHostInfo,
+  SyncManifestEntry,
   TrashHistoryState,
 } from "../shared/types";
 
@@ -33,6 +44,8 @@ const api = {
   getAppVersion: (): Promise<string> => ipcRenderer.invoke("app:get-version"),
   listManagedInstances: (): Promise<ManagedInstance[]> =>
     ipcRenderer.invoke("instances:list"),
+  scanAtLauncherInstances: (): Promise<DetectedLauncherInstance[]> =>
+    ipcRenderer.invoke("instances:scan-atlauncher"),
   saveManagedInstance: (instancePath: string): Promise<ManagedInstance> =>
     ipcRenderer.invoke("instances:save", instancePath),
   untrackManagedInstance: (id: string): Promise<boolean> =>
@@ -74,6 +87,95 @@ const api = {
     snapshotId: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("snapshots:delete", instancePath, snapshotId),
+  startSyncHost: (instancePath: string, port: number): Promise<SyncHostInfo> =>
+    ipcRenderer.invoke("sync:start-host", instancePath, port),
+  stopSyncHost: (): Promise<void> => ipcRenderer.invoke("sync:stop-host"),
+  connectSyncPeer: (
+    instancePath: string,
+    peerIp: string,
+    peerPort: number,
+  ): Promise<SyncConnection> =>
+    ipcRenderer.invoke("sync:connect-peer", instancePath, peerIp, peerPort),
+  pushSyncFile: (
+    instancePath: string,
+    peerIp: string,
+    peerPort: number,
+    entry: SyncManifestEntry,
+    replaceModId?: string,
+    transferId?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      "sync:push-file",
+      instancePath,
+      peerIp,
+      peerPort,
+      entry,
+      replaceModId,
+      transferId,
+    ),
+  pullSyncFile: (
+    instancePath: string,
+    peerIp: string,
+    peerPort: number,
+    entry: SyncManifestEntry,
+    replaceModId?: string,
+    transferId?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      "sync:pull-file",
+      instancePath,
+      peerIp,
+      peerPort,
+      entry,
+      replaceModId,
+      transferId,
+    ),
+  cancelSyncTransfer: (transferId: string): Promise<boolean> =>
+    ipcRenderer.invoke("sync:cancel-transfer", transferId),
+  cancelAllSyncTransfers: (): Promise<void> =>
+    ipcRenderer.invoke("sync:cancel-all-transfers"),
+  disconnectSyncPeer: (peerIp: string, peerPort: number): Promise<boolean> =>
+    ipcRenderer.invoke("sync:disconnect-peer", peerIp, peerPort),
+  disconnectHostedPeer: (): Promise<boolean> =>
+    ipcRenderer.invoke("sync:clear-hosted-peer"),
+  suggestSyncDelete: (
+    peerIp: string,
+    peerPort: number,
+    entry: SyncManifestEntry,
+  ): Promise<void> =>
+    ipcRenderer.invoke("sync:suggest-delete", peerIp, peerPort, entry),
+  onSyncEvent: (callback: (event: SyncEvent) => void): (() => void) => {
+    const listener = (_event: unknown, syncEvent: SyncEvent): void =>
+      callback(syncEvent);
+    ipcRenderer.on("sync:event", listener);
+    return () => ipcRenderer.removeListener("sync:event", listener);
+  },
+  onSyncPeerConnected: (
+    callback: (connection: SyncConnection) => void,
+  ): (() => void) => {
+    const listener = (_event: unknown, connection: SyncConnection): void =>
+      callback(connection);
+    ipcRenderer.on("sync:peer-connected", listener);
+    return () => ipcRenderer.removeListener("sync:peer-connected", listener);
+  },
+  onSyncDiffUpdated: (
+    callback: (update: {
+      diff: SyncConnection["diff"];
+      summary: SyncDiffSummary;
+    }) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: unknown,
+      update: { diff: SyncConnection["diff"]; summary: SyncDiffSummary },
+    ): void => callback(update);
+    ipcRenderer.on("sync:diff-updated", listener);
+    return () => ipcRenderer.removeListener("sync:diff-updated", listener);
+  },
+  onSyncPeerDisconnected: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on("sync:peer-disconnected", listener);
+    return () => ipcRenderer.removeListener("sync:peer-disconnected", listener);
+  },
   getAvailableThemes: (): Promise<CustomTheme[]> =>
     ipcRenderer.invoke("themes:get-available"),
   openThemesFolder: (): Promise<boolean> =>
@@ -95,6 +197,40 @@ const api = {
         ipcRenderer.removeListener("mods:scan-progress", listener),
       );
   },
+  scanRegistries: (
+    instancePath: string,
+    onProgress?: (progress: RegistryScanProgress) => void,
+  ): Promise<RegistryScanResult> => {
+    const listener = (_event: unknown, progress: RegistryScanProgress): void =>
+      onProgress?.(progress);
+    ipcRenderer.on("registry:scan-progress", listener);
+    return ipcRenderer
+      .invoke("registry:scan-instance", instancePath)
+      .finally(() =>
+        ipcRenderer.removeListener("registry:scan-progress", listener),
+      );
+  },
+  onRegistryOutdated: (
+    listener: (payload: { instancePath: string }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: unknown,
+      payload: { instancePath: string },
+    ): void => listener(payload);
+    ipcRenderer.on("instance:registry-outdated", handler);
+    return () =>
+      ipcRenderer.removeListener("instance:registry-outdated", handler);
+  },
+  readRegistryAssets: (
+    instancePath: string,
+    requests: RegistryAssetRequest[],
+  ): Promise<RegistryAssetResult[]> =>
+    ipcRenderer.invoke("registry:read-assets", instancePath, requests),
+  exportRegistryAsset: (
+    instancePath: string,
+    request: RegistryExportAssetRequest,
+  ): Promise<{ success: boolean; filePath?: string }> =>
+    ipcRenderer.invoke("registry:export-asset", instancePath, request),
   /** Returns the last successfully scanned instance folder, or null. */
   getLastFolder: (): Promise<string | null> =>
     ipcRenderer.invoke("config:get-last-folder"),
@@ -188,6 +324,11 @@ const api = {
   /** Export parsed mod and instance metadata to an instance-local Markdown file. */
   exportModpackInfo: (instancePath: string): Promise<string> =>
     ipcRenderer.invoke("mods:export-info", instancePath),
+  saveModpackReport: (
+    format: "md" | "json" | "csv",
+    content: string,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("reports:save-file", { format, content }),
   /** Recursively list text config files and folders in an instance. */
   scanConfigTree: (instancePath: string): Promise<ConfigTreeEntry[]> =>
     ipcRenderer.invoke("config:scan-tree", instancePath),

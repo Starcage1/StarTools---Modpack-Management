@@ -6,7 +6,7 @@ import {
   dialog,
   clipboard,
 } from "electron";
-import { appendFileSync, lstatSync, mkdirSync, readdirSync, statSync } from "fs";
+import { lstatSync, readdirSync, statSync, writeFileSync } from "fs";
 import { basename, join, resolve, sep } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { scanModsFolder } from "./modParser";
@@ -28,6 +28,7 @@ import { exportModpackInfo } from "./exportInfo";
 import { readConfigFile, saveConfigFile, scanConfigTree } from "./configFiles";
 import {
   listManagedInstances,
+  scanAtLauncherInstances,
   saveManagedInstance,
   untrackManagedInstance,
   validateInstanceRoot,
@@ -47,6 +48,26 @@ import {
   setManualConfigMapping,
 } from "./configMapperService";
 import { detectVSCodePath, openConfigInVSCode } from "./vsCode";
+import { logCrash } from "./crashLogger";
+import {
+  readRegistryAssetBuffer,
+  readRegistryAssets,
+  invalidateInstanceRegistryCache,
+  scanInstanceRegistries,
+} from "./services/RegistryService";
+import {
+  cancelAllSyncTransfers,
+  cancelSyncTransfer,
+  clearHostedPeer,
+  configureSyncOptions,
+  connectSyncPeer,
+  disconnectSyncPeer,
+  pullSyncFile,
+  pushSyncFile,
+  startSyncHost,
+  stopSyncHost,
+  suggestPeerDelete,
+} from "./services/SyncService";
 import {
   listPackTextFiles,
   readPackTextFile,
@@ -61,37 +82,13 @@ import type {
   CatOverrideEntry,
   DepOverrideEntry,
   PackCategory,
+  RegistryAssetRequest,
+  RegistryExportAssetRequest,
   SideOverride,
+  SyncManifestEntry,
 } from "../shared/types";
 
 let mainWindow: BrowserWindow | null = null;
-
-function crashErrorText(error: unknown): string {
-  if (error instanceof Error) return error.stack || error.message;
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error) ?? String(error);
-  } catch {
-    return String(error);
-  }
-}
-
-function logCrash(type: string, error: unknown): string | null {
-  try {
-    const logDir = app.getPath("userData");
-    const logPath = join(logDir, "crash.log");
-    mkdirSync(logDir, { recursive: true });
-    appendFileSync(
-      logPath,
-      `[${new Date().toISOString()}] [${type}] ${crashErrorText(error)}\n\n`,
-      "utf8",
-    );
-    return logPath;
-  } catch (writeError) {
-    console.error("Failed to write crash log", writeError);
-    return null;
-  }
-}
 
 process.on("uncaughtException", (error) => {
   const logPath = logCrash("UNCAUGHT_EXCEPTION", error);
@@ -126,14 +123,18 @@ function broadcastTrashCount(): void {
 }
 
 function createWindow(): void {
+  const startupWindowMode = getSettings().startupWindowMode;
   const window_ = new BrowserWindow({
     title: "StarTools - Modpack Manager",
     icon: join(
       is.dev ? app.getAppPath() : process.resourcesPath,
       ...(is.dev ? ["build", "logo.ico"] : ["logo.ico"]),
     ),
-    width: 1200,
+    width: 1280,
     height: 800,
+    minWidth: 960,
+    minHeight: 600,
+    center: true,
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -144,8 +145,12 @@ function createWindow(): void {
 
   mainWindow = window_;
 
-  window_.on("ready-to-show", () => {
+  if (startupWindowMode === "maximized") window_.maximize();
+  else if (startupWindowMode === "fullscreen") window_.setFullScreen(true);
+
+  window_.once("ready-to-show", () => {
     window_.show();
+    window_.focus();
   });
 
   window_.webContents.setWindowOpenHandler((details) => {
@@ -177,7 +182,161 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("app:get-version", () => app.getVersion());
+  ipcMain.handle(
+    "sync:start-host",
+    (event, instancePath: string, port: number) =>
+      startSyncHost(instancePath, port, (syncEvent) => {
+        if (event.sender.isDestroyed()) return;
+        if (syncEvent.type === "peer-connected") {
+          event.sender.send("sync:peer-connected", syncEvent.connection);
+        } else if (syncEvent.type === "diff-updated") {
+          event.sender.send("sync:diff-updated", {
+            diff: syncEvent.diff,
+            summary: syncEvent.summary,
+          });
+        } else if (syncEvent.type === "peer-disconnected") {
+          event.sender.send("sync:peer-disconnected");
+        } else {
+          event.sender.send("sync:event", syncEvent);
+        }
+      }),
+  );
+  ipcMain.handle("sync:stop-host", () => {
+    cancelAllSyncTransfers();
+    return stopSyncHost();
+  });
+  ipcMain.handle("sync:cancel-transfer", (_event, transferId: string) =>
+    cancelSyncTransfer(transferId),
+  );
+  ipcMain.handle("sync:cancel-all-transfers", () => cancelAllSyncTransfers());
+  ipcMain.handle("sync:clear-hosted-peer", async () => {
+    cancelAllSyncTransfers();
+    await clearHostedPeer();
+    return true;
+  });
+  ipcMain.handle(
+    "sync:disconnect-peer",
+    async (_event, peerIp: string, peerPort: number) => {
+      cancelAllSyncTransfers();
+      await disconnectSyncPeer(peerIp, peerPort);
+      await clearHostedPeer();
+      return true;
+    },
+  );
+  ipcMain.handle(
+    "sync:connect-peer",
+    (_event, instancePath: string, peerIp: string, peerPort: number) =>
+      connectSyncPeer(instancePath, peerIp, peerPort),
+  );
+  ipcMain.handle(
+    "sync:push-file",
+    (
+      event,
+      instancePath: string,
+      peerIp: string,
+      peerPort: number,
+      entry: SyncManifestEntry,
+      replaceModId?: string,
+      transferId?: string,
+    ) =>
+      pushSyncFile(
+        instancePath,
+        peerIp,
+        peerPort,
+        entry,
+        replaceModId,
+        (syncEvent) => {
+          if (!event.sender.isDestroyed())
+            event.sender.send("sync:event", syncEvent);
+        },
+        transferId,
+      ),
+  );
+  ipcMain.handle(
+    "sync:pull-file",
+    (
+      event,
+      instancePath: string,
+      peerIp: string,
+      peerPort: number,
+      entry: SyncManifestEntry,
+      replaceModId?: string,
+      transferId?: string,
+    ) =>
+      pullSyncFile(
+        instancePath,
+        peerIp,
+        peerPort,
+        entry,
+        replaceModId,
+        (syncEvent) => {
+          if (!event.sender.isDestroyed())
+            event.sender.send("sync:event", syncEvent);
+        },
+        transferId,
+      ),
+  );
+  ipcMain.handle(
+    "sync:suggest-delete",
+    (_event, peerIp: string, peerPort: number, entry: SyncManifestEntry) =>
+      suggestPeerDelete(peerIp, peerPort, entry),
+  );
+  ipcMain.handle(
+    "registry:scan-instance",
+    async (event, instancePath: string) =>
+      scanInstanceRegistries(instancePath, (progress) =>
+        event.sender.send("registry:scan-progress", progress),
+      ),
+  );
+  ipcMain.handle(
+    "registry:read-assets",
+    (_event, instancePath: string, requests: RegistryAssetRequest[]) =>
+      readRegistryAssets(instancePath, requests),
+  );
+  ipcMain.handle(
+    "registry:export-asset",
+    async (
+      _event,
+      instancePath: string,
+      request: RegistryExportAssetRequest,
+    ) => {
+      if (!request || typeof request.defaultFileName !== "string")
+        return { success: false };
+      const assetPath = request.assetPath;
+      const isPng =
+        typeof assetPath === "string" &&
+        assetPath.toLowerCase().endsWith(".png");
+      const isJson =
+        typeof assetPath === "string" &&
+        assetPath.toLowerCase().endsWith(".json");
+      if (!isPng && !isJson) return { success: false };
+      const defaultFileName = basename(request.defaultFileName)
+        .replace(/[<>:"/\\|?*]/g, "_")
+        .split("")
+        .filter((character) => character.charCodeAt(0) >= 32)
+        .join("");
+      const options = {
+        title: "Export Registry Asset",
+        defaultPath: join(
+          app.getPath("desktop"),
+          defaultFileName || (isPng ? "texture.png" : "model.json"),
+        ),
+        filters: isPng
+          ? [{ name: "PNG Image", extensions: ["png"] }]
+          : [{ name: "Model JSON", extensions: ["json"] }],
+      };
+      const result = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, options)
+        : await dialog.showSaveDialog(options);
+      if (result.canceled || !result.filePath) return { success: false };
+      const data = readRegistryAssetBuffer(instancePath, request);
+      if (!data) return { success: false };
+      writeFileSync(result.filePath, data);
+      return { success: true, filePath: result.filePath };
+    },
+  );
   ipcMain.handle("instances:list", () => listManagedInstances());
+  ipcMain.handle("instances:scan-atlauncher", () => scanAtLauncherInstances());
   ipcMain.handle("instances:save", (_event, instancePath: string) =>
     saveManagedInstance(instancePath),
   );
@@ -331,9 +490,22 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     "mods:set-enabled",
-    (_event, instancePath: string, fileName: string, enabled: boolean) => {
+    async (
+      _event,
+      instancePath: string,
+      fileName: string,
+      enabled: boolean,
+    ) => {
       // Moves the jar between \mods\ and \disabledmods\. Throws on failure.
-      return setModEnabled(instancePath, fileName, enabled);
+      const result = setModEnabled(instancePath, fileName, enabled);
+      invalidateInstanceRegistryCache(instancePath);
+      for (const window_ of BrowserWindow.getAllWindows()) {
+        if (!window_.webContents.isDestroyed())
+          window_.webContents.send("instance:registry-outdated", {
+            instancePath,
+          });
+      }
+      return result;
     },
   );
 
@@ -522,6 +694,52 @@ app.whenReady().then(() => {
     return exportModpackInfo(instancePath);
   });
 
+  ipcMain.handle(
+    "reports:save-file",
+    async (
+      _event,
+      request: { format: "md" | "json" | "csv"; content: string },
+    ) => {
+      if (
+        !request ||
+        !["md", "json", "csv"].includes(request.format) ||
+        typeof request.content !== "string"
+      )
+        throw new Error("Invalid report export request.");
+      const extension = request.format;
+      const result = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, {
+            title: "Save Modpack Report",
+            defaultPath: join(
+              app.getPath("desktop"),
+              `modpack-report.${extension}`,
+            ),
+            filters: [
+              {
+                name: `${extension.toUpperCase()} file`,
+                extensions: [extension],
+              },
+            ],
+          })
+        : await dialog.showSaveDialog({
+            title: "Save Modpack Report",
+            defaultPath: join(
+              app.getPath("desktop"),
+              `modpack-report.${extension}`,
+            ),
+            filters: [
+              {
+                name: `${extension.toUpperCase()} file`,
+                extensions: [extension],
+              },
+            ],
+          });
+      if (result.canceled || !result.filePath) return null;
+      writeFileSync(result.filePath, request.content, "utf8");
+      return result.filePath;
+    },
+  );
+
   ipcMain.handle("config:scan-tree", (_event, instancePath: string) => {
     return scanConfigTree(instancePath);
   });
@@ -541,7 +759,9 @@ app.whenReady().then(() => {
   );
 
   ipcMain.handle("settings:get", () => {
-    return getSettings();
+    const settings = getSettings();
+    configureSyncOptions(settings.syncBufferSizeKb, settings.autoDetectRadmin);
+    return settings;
   });
 
   ipcMain.handle("settings:save", (_event, patch: Partial<AppSettings>) => {
@@ -549,7 +769,9 @@ app.whenReady().then(() => {
     if (typeof patch !== "object" || patch === null) {
       throw new Error("Invalid settings patch");
     }
-    return saveSettings(patch);
+    const saved = saveSettings(patch);
+    configureSyncOptions(saved.syncBufferSizeKb, saved.autoDetectRadmin);
+    return saved;
   });
 
   ipcMain.handle("mods:get-dep-overrides", () => {
@@ -593,6 +815,10 @@ app.whenReady().then(() => {
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("before-quit", () => {
+  void stopSyncHost();
 });
 
 app.on("window-all-closed", () => {

@@ -43,8 +43,14 @@ export interface ParsedMod {
   iconDataUri: string | null;
   /** External (non-core) dependencies after filtering */
   dependencies: ModDependency[];
+  /** True when this archive contains Fabric Loader metadata. */
+  isFabricMod?: boolean;
+  /** True when a Fabric mod is incompatible with this Forge-family instance. */
+  incompatibleFabric?: boolean;
+  /** Mod IDs supplied by jars bundled inside this archive. */
+  providedModIds?: string[];
   /** Loader that successfully parsed this file */
-  loader: "neoforge" | "unknown";
+  loader: "fabric" | "neoforge" | "unknown";
 }
 
 export interface ScanModsResult {
@@ -54,9 +60,130 @@ export interface ScanModsResult {
   modsPath: string;
   /** Successfully parsed mods */
   mods: ParsedMod[];
+  /** Loader inferred from the instance metadata or the majority of parsed mods. */
+  modLoader: string;
+  /** Whether an enabled Sinytra Connector installation was detected. */
+  hasSinytraConnector: boolean;
   /** File names that were skipped (broken / not a mod / missing toml) */
   skipped: { fileName: string; reason: string }[];
 }
+
+export type RegistryKind = "item" | "block" | "biome" | "dimension" | "mob";
+
+export interface RegistryEntry {
+  id: string;
+  displayName: string;
+  namespace: string;
+  type: RegistryKind;
+  /** Config path relative to the archive root, read lazily by the main process. */
+  texturePath: string | null;
+  /** Jar containing the resolved texture, which may be the vanilla client jar. */
+  textureSourceJar?: string;
+  /** Registry JSON path inside the source jar, available for direct export. */
+  modelPath?: string | null;
+  sourceJar: string;
+}
+
+export interface RegistryScanResult {
+  instancePath: string;
+  minecraftVersion: string;
+  fromCache: boolean;
+  items: RegistryEntry[];
+  blocks: RegistryEntry[];
+  biomes: RegistryEntry[];
+  dimensions: RegistryEntry[];
+  mobs: RegistryEntry[];
+}
+
+export interface RegistryScanProgress {
+  indexedMods: number;
+  totalMods: number;
+  currentFile?: string;
+}
+
+export interface RegistryAssetRequest {
+  sourceJar: string;
+  texturePath: string;
+}
+
+export interface RegistryAssetResult extends RegistryAssetRequest {
+  dataUri: string | null;
+}
+
+export interface RegistryExportAssetRequest {
+  modId: string;
+  assetPath: string;
+  defaultFileName: string;
+  sourceJar?: string;
+}
+
+export type SyncDiffType =
+  "only_local" | "only_peer" | "version_mismatch" | "synced";
+
+export interface SyncManifestEntry {
+  fileName: string;
+  size: number;
+  sha1: string;
+  modId: string;
+  version: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface SyncDiffEntry {
+  type: SyncDiffType;
+  key: string;
+  local?: SyncManifestEntry;
+  peer?: SyncManifestEntry;
+}
+
+export interface SyncConnection {
+  peerIp: string;
+  peerPort: number;
+  peerName: string;
+  localName: string;
+  pingMs: number;
+  localManifest: SyncManifestEntry[];
+  peerManifest: SyncManifestEntry[];
+  diff: SyncDiffEntry[];
+}
+
+export interface SyncDiffSummary {
+  only_local: number;
+  only_peer: number;
+  version_mismatch: number;
+  synced: number;
+}
+
+export interface SyncHostDiffUpdated {
+  diff: SyncDiffEntry[];
+  summary: SyncDiffSummary;
+}
+
+export interface SyncHostInfo {
+  ip: string;
+  port: number;
+  instanceName: string;
+}
+
+export interface SyncTransferProgress {
+  type: "progress";
+  direction: "push" | "pull" | "incoming";
+  fileName: string;
+  percent: number;
+  bytesTransferred: number;
+  totalBytes: number;
+}
+
+export interface SyncNotification {
+  type: "notification";
+  message: string;
+  action?: "delete-suggestion" | "incoming-upload";
+  fileName?: string;
+  modId?: string;
+}
+
+export type SyncEvent = SyncTransferProgress | SyncNotification;
 
 export type ScanProgressStage = "reading" | "parsing";
 
@@ -100,12 +227,17 @@ export interface InstanceInfo {
 export type ThemeSetting = "light" | "dark";
 export type TableFontSetting = "small" | "medium" | "large";
 export type DisabledPlacement = "end" | "start";
+export type IncompatibleFabricPlacement = "end" | "start" | "alphabetical";
 export type AppFontFamily = "sans" | "mono" | "serif";
+export type StartupWindowMode = "windowed" | "maximized" | "fullscreen";
+export type SearchInputDebounceMs = 100 | 150 | 250;
+export type SyncBufferSizeKb = 512 | 1024 | 2048;
 
 export interface AppSettings {
   theme: ThemeSetting;
   tableFont: TableFontSetting;
   disabledPlacement: DisabledPlacement;
+  incompatibleFabricPlacement: IncompatibleFabricPlacement;
   /** UI font family. Defaults to system sans. */
   fontFamily: AppFontFamily;
   /** NanaZip executable path. Omitted when NanaZip is auto-detected. */
@@ -115,8 +247,15 @@ export interface AppSettings {
   /** Selected community theme id; built-in theme remains in `theme`. */
   customThemeId?: string;
   landingScreen: "home" | "last-instance";
+  startupWindowMode: StartupWindowMode;
   confirmTrashMods: boolean;
   promptDeleteAssociatedConfigs: boolean;
+  crossModOnlyCollisions: boolean;
+  ignoreVanillaBackportDuplicates: boolean;
+  syncPort: number;
+  autoDetectRadmin: boolean;
+  syncBufferSizeKb: SyncBufferSizeKb;
+  searchInputDebounceMs: SearchInputDebounceMs;
 }
 
 export interface ManagedInstance {
@@ -127,6 +266,15 @@ export interface ManagedInstance {
   mcVersion: string;
   lastOpened: number;
   /** Current total of enabled and disabled jar files. */
+  modCount: number;
+}
+
+/** An ATLauncher instance found on disk but not necessarily tracked yet. */
+export interface DetectedLauncherInstance {
+  name: string;
+  path: string;
+  loader: string;
+  mcVersion: string;
   modCount: number;
 }
 
@@ -174,10 +322,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "dark",
   tableFont: "medium",
   disabledPlacement: "end",
+  incompatibleFabricPlacement: "end",
   fontFamily: "sans",
   landingScreen: "home",
+  startupWindowMode: "windowed",
   confirmTrashMods: true,
   promptDeleteAssociatedConfigs: true,
+  crossModOnlyCollisions: true,
+  ignoreVanillaBackportDuplicates: true,
+  syncPort: 48500,
+  autoDetectRadmin: true,
+  syncBufferSizeKb: 1024,
+  searchInputDebounceMs: 150,
 };
 
 /** Table body font size in px for each density setting. */

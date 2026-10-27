@@ -11,6 +11,7 @@ import {
 import { basename, join, resolve } from "path";
 import { getInstanceInfo } from "./instanceInfo";
 import type { ManagedInstance } from "../shared/types";
+import type { DetectedLauncherInstance } from "../shared/types";
 
 export const MAX_MANAGED_INSTANCES = 5;
 
@@ -110,6 +111,48 @@ function writeRegistry(instances: ManagedInstance[]): void {
 
 export function listManagedInstances(): ManagedInstance[] {
   return readRegistry();
+}
+
+/** Find ATLauncher instances without changing their files or the tracked list. */
+export function scanAtLauncherInstances(): DetectedLauncherInstance[] {
+  const instancesRoot = join(app.getPath("appData"), "ATLauncher", "instances");
+  let entries;
+  try {
+    entries = readdirSync(instancesRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+    .flatMap((entry) => {
+      const root = join(instancesRoot, entry.name);
+      let hasMods = false;
+      let hasManifest = false;
+      try {
+        const modsStats = lstatSync(join(root, "mods"));
+        hasMods = modsStats.isDirectory() && !modsStats.isSymbolicLink();
+      } catch {
+        // ATLauncher can retain instance metadata before creating the mods folder.
+      }
+      try {
+        const manifestStats = lstatSync(join(root, "instance.json"));
+        hasManifest = manifestStats.isFile() && !manifestStats.isSymbolicLink();
+      } catch {
+        // Continue if only the mods folder is present.
+      }
+      if (!hasMods && !hasManifest) return [];
+
+      const info = getInstanceInfo(root);
+      return [{
+        name: info.instanceName || entry.name,
+        path: root,
+        loader: info.modLoader,
+        mcVersion: info.minecraftVersion,
+        modCount: safeJarCount(join(root, "mods")),
+      }];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Save or refresh metadata only; this never creates, moves, or removes instance files. */

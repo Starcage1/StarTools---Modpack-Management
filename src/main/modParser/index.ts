@@ -4,6 +4,9 @@ import AdmZip from "adm-zip";
 import type { ParsedMod, ScanModsResult } from "../../shared/types";
 import type { ModParserStrategy } from "./types";
 import { NeoForgeParser } from "./neoForgeParser";
+import { FabricParser } from "./fabricParser";
+import { readEmbeddedModIds } from "./embeddedMods";
+import { getInstanceInfo } from "../instanceInfo";
 import { reloadSideOverrides } from "../sideOverrides";
 import {
   applyDepOverrides,
@@ -18,7 +21,54 @@ import { DISABLED_DIR_NAME, MODS_DIR_NAME } from "../modFiles";
  * Strategies are tried in order — to support a new loader (Fabric/Quilt,
  * Forge), implement `ModParserStrategy` and append it to this array.
  */
-const STRATEGIES: ModParserStrategy[] = [new NeoForgeParser()];
+const STRATEGIES: ModParserStrategy[] = [
+  new NeoForgeParser(),
+  new FabricParser(),
+];
+
+const BUNDLED_DEPENDENCY_PROVIDERS: Record<string, string[]> = {
+  create: ["flywheel"],
+  create_aeronautics: ["simulated", "create_simulated"],
+  aeronautics: ["simulated", "create_simulated"],
+};
+
+const FABRIC_API_IDS = new Set([
+  "fabricapi",
+  "fabric",
+  "fabricapibase",
+]);
+const CONNECTOR_IDS = new Set([
+  "connectormod",
+  "connector",
+  "sinytra",
+  "sinytraconnector",
+]);
+
+function normalizeId(value: string): string {
+  return value.trim().toLowerCase().replace(/[-_.]/g, "");
+}
+
+function isProvidedByInstalledMod(
+  dependencyId: string,
+  installedIds: Set<string>,
+): boolean {
+  const dependency = normalizeId(dependencyId);
+  for (const [provider, provides] of Object.entries(
+    BUNDLED_DEPENDENCY_PROVIDERS,
+  )) {
+    if (
+      installedIds.has(normalizeId(provider)) &&
+      provides.some((provided) => normalizeId(provided) === dependency)
+    ) {
+      return true;
+    }
+  }
+  // Aeronautics packs commonly declare either spelling of the bundled module.
+  if (["simulated", "createsimulated"].includes(dependency)) {
+    return installedIds.has("aeronautics") || installedIds.has("createaeronautics");
+  }
+  return false;
+}
 
 function resolveModsDir(instancePath: string): string | null {
   const direct = join(instancePath, MODS_DIR_NAME);
@@ -41,10 +91,19 @@ function parseJarFile(filePath: string, fileName: string): ParsedMod | null {
     );
     return null;
   }
-  for (const strategy of STRATEGIES) {
+  const hasNativeForgeMetadata = Boolean(
+    zip.getEntry("META-INF/neoforge.mods.toml") ??
+      zip.getEntry("META-INF/mods.toml"),
+  );
+  const strategies = hasNativeForgeMetadata
+    ? STRATEGIES
+    : [...STRATEGIES].reverse();
+  for (const strategy of strategies) {
     try {
       if (strategy.canHandle(zip)) {
-        return strategy.parse(zip, fileName, filePath);
+        const parsed = strategy.parse(zip, fileName, filePath);
+        if (parsed) parsed.providedModIds = readEmbeddedModIds(zip);
+        return parsed;
       }
     } catch (err) {
       console.warn(
@@ -136,13 +195,59 @@ export function scanModsFolder(
   scanFiles(modsPath, files, true);
   scanFiles(disabledPath, disabledFiles, false);
 
-  // Cross-reference: flag required deps that are not installed.
-  const installed = new Set(mods.map((m) => m.modId.toLowerCase()));
+  // Prefer explicit loader metadata; fall back to Fabric metadata majority.
+  const metadataLoader = getInstanceInfo(instancePath).modLoader;
+  const fabricCount = mods.filter((mod) => mod.isFabricMod).length;
+  const neoForgeCount = mods.filter((mod) => mod.loader === "neoforge").length;
+  const modLoader =
+    metadataLoader !== "Unknown"
+      ? metadataLoader
+      : fabricCount > neoForgeCount
+        ? "Fabric"
+        : neoForgeCount > 0
+          ? "NeoForge"
+          : "Unknown";
+  const forgeFamily = /^(forge|neoforge)$/i.test(modLoader);
+  const hasSinytraConnector = mods.some(
+    (mod) =>
+      mod.enabled &&
+      (CONNECTOR_IDS.has(normalizeId(mod.modId)) ||
+        mod.fileName.toLowerCase().includes("connector-")),
+  );
+  for (const mod of mods) {
+    mod.incompatibleFabric = Boolean(
+      mod.isFabricMod && forgeFamily && !hasSinytraConnector,
+    );
+  }
+
+  // Count libraries embedded in a mod as present, along with safe ecosystem aliases.
+  const installed = new Set(
+    mods.flatMap((mod) => [mod.modId, ...(mod.providedModIds ?? [])])
+      .map((id) => normalizeId(id)),
+  );
   for (const mod of mods) {
     for (const dep of mod.dependencies) {
-      dep.satisfied = installed.has(dep.modId.toLowerCase());
+      const depId = normalizeId(dep.modId);
+      const fabricApiProviderInstalled =
+        FABRIC_API_IDS.has(depId) &&
+        mods.some(
+          (candidate) =>
+            candidate.enabled &&
+            FABRIC_API_IDS.has(normalizeId(candidate.modId)),
+        );
+      dep.satisfied =
+        installed.has(depId) ||
+        isProvidedByInstalledMod(dep.modId, installed) ||
+        fabricApiProviderInstalled;
     }
   }
 
-  return { instancePath, modsPath, mods, skipped };
+  return {
+    instancePath,
+    modsPath,
+    mods,
+    skipped,
+    modLoader,
+    hasSinytraConnector,
+  };
 }

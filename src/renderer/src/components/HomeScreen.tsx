@@ -7,6 +7,7 @@ import {
   Clipboard,
   Clock3,
   Code2,
+  Download,
   ExternalLink,
   FileText,
   FolderOpen,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import type {
   InstanceInfo,
+  DetectedLauncherInstance,
   ManagedInstance,
   ScanModsResult,
   SnapshotEntry,
@@ -41,6 +43,7 @@ interface HomeScreenProps {
   appVersion: string;
   loading?: boolean;
   onAdd: () => void;
+  onTrack: (instancePath: string) => Promise<void>;
   onOpen: (instance: ManagedInstance) => void;
   onUntrack: (instance: ManagedInstance) => void;
   onSettings: () => void;
@@ -60,6 +63,7 @@ function HomeScreen({
   appVersion,
   loading = false,
   onAdd,
+  onTrack,
   onOpen,
   onUntrack,
   onSettings,
@@ -84,6 +88,10 @@ function HomeScreen({
     string | null
   >(null);
   const [isThemeGuideOpen, setIsThemeGuideOpen] = useState(false);
+  const [showAddOptions, setShowAddOptions] = useState(false);
+  const [showAtLauncher, setShowAtLauncher] = useState(false);
+  const [detectedInstances, setDetectedInstances] = useState<DetectedLauncherInstance[]>([]);
+  const [scanningAtLauncher, setScanningAtLauncher] = useState(false);
   const selectedInstance = useMemo(
     () =>
       instances.find((instance) => instance.id === selectedInstanceId) ??
@@ -100,6 +108,20 @@ function HomeScreen({
   const inspectLoading = Boolean(
     selectedInstance && loadedInstanceId !== selectedInstance.id,
   );
+
+  const openAtLauncherImport = async (): Promise<void> => {
+    setShowAddOptions(false);
+    setShowAtLauncher(true);
+    setScanningAtLauncher(true);
+    try {
+      setDetectedInstances(await window.api.scanAtLauncherInstances());
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+      setDetectedInstances([]);
+    } finally {
+      setScanningAtLauncher(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -230,7 +252,7 @@ function HomeScreen({
             StarTools - Modpack Manager
           </span>
           <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 font-mono text-[10px] text-zinc-400">
-            Companion v{appVersion || "0.5.0"}
+            Companion v{appVersion || "0.6.0"} Beta
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -350,7 +372,7 @@ function HomeScreen({
             {instances.length < 5 ? (
               <button
                 type="button"
-                onClick={onAdd}
+                onClick={() => setShowAddOptions(true)}
                 disabled={loading}
                 className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-transparent p-5 text-sm text-zinc-500 transition hover:border-zinc-500 hover:bg-zinc-900/40 hover:text-zinc-200 disabled:opacity-50"
               >
@@ -638,6 +660,53 @@ function HomeScreen({
           onOpenThemesFolder={() => window.api.openThemesFolder()}
           onError={onError}
         />
+      )}
+
+      {showAddOptions && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onMouseDown={(event) => event.target === event.currentTarget && setShowAddOptions(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="add-instance-title" className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 id="add-instance-title" className="text-sm font-semibold">Add an instance</h2>
+              <button type="button" onClick={() => setShowAddOptions(false)} aria-label="Close" className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white"><X size={16} /></button>
+            </div>
+            <div className="space-y-2">
+              <button type="button" onClick={() => void openAtLauncherImport()} className="flex w-full items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-left transition hover:border-cyan-500/50 hover:bg-zinc-800">
+                <Download size={16} className="text-cyan-300" />
+                <span><span className="block text-xs font-medium">Import from ATLauncher</span><span className="mt-1 block text-[10px] text-zinc-500">Find and track an existing ATLauncher instance.</span></span>
+              </button>
+              <button type="button" onClick={() => { setShowAddOptions(false); onAdd(); }} className="flex w-full items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-left transition hover:border-zinc-500 hover:bg-zinc-800">
+                <FolderOpen size={16} className="text-zinc-300" />
+                <span><span className="block text-xs font-medium">Browse Custom Folder…</span><span className="mt-1 block text-[10px] text-zinc-500">Choose a Prism, CurseForge, or other instance folder.</span></span>
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showAtLauncher && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onMouseDown={(event) => event.target === event.currentTarget && setShowAtLauncher(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="atlauncher-title" className="flex max-h-[min(80vh,640px)] w-full max-w-xl flex-col rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+              <div><h2 id="atlauncher-title" className="text-sm font-semibold">Import from ATLauncher</h2><p className="mt-1 text-[11px] text-zinc-500">Instances are only added to your list. Their files are not changed.</p></div>
+              <button type="button" onClick={() => setShowAtLauncher(false)} aria-label="Close" className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white"><X size={16} /></button>
+            </div>
+            <div className="min-h-32 space-y-2 overflow-y-auto p-4">
+              {scanningAtLauncher ? (
+                <p className="flex items-center justify-center gap-2 py-10 text-xs text-zinc-400"><LoaderCircle size={14} className="animate-spin" />Scanning ATLauncher instances…</p>
+              ) : detectedInstances.length === 0 ? (
+                <p className="py-10 text-center text-xs text-zinc-500">No ATLauncher instances with a mods folder or instance manifest were found.</p>
+              ) : detectedInstances.map((detected) => {
+                const tracked = instances.some((instance) => instance.path.toLowerCase() === detected.path.toLowerCase());
+                const full = instances.length >= 5 && !tracked;
+                return <div key={detected.path} className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                  <div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{detected.name}</p><p className="mt-1 text-[10px] text-zinc-400">{detected.loader} · Minecraft {detected.mcVersion} · {detected.modCount} mods</p><p className="mt-1 truncate font-mono text-[10px] text-zinc-600" title={detected.path}>{detected.path}</p></div>
+                  <button type="button" disabled={tracked || full} onClick={() => void onTrack(detected.path)} className="shrink-0 rounded-md border border-zinc-700 px-3 py-1.5 text-[10px] font-medium text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-default disabled:opacity-50">{tracked ? "Tracked" : full ? "List full" : "Track"}</button>
+                </div>;
+              })}
+            </div>
+            <div className="flex justify-end border-t border-zinc-800 p-3"><button type="button" onClick={() => setShowAtLauncher(false)} className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Done</button></div>
+          </section>
+        </div>
       )}
     </div>
   );

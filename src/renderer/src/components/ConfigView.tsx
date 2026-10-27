@@ -743,7 +743,7 @@ function ConfigView({
             />
           </div>
         ) : (
-          <div className="flex min-h-[28rem] flex-1 items-center justify-center bg-[var(--bg-surface)] p-6 text-center text-sm text-gray-400">
+          <div className="h-full min-h-[28rem] flex-1 flex flex-col justify-start items-center overflow-hidden bg-[var(--bg-surface)] px-6 pt-24 pb-12 text-center text-sm text-gray-400">
             {busy
               ? "Opening file…"
               : "Choose a configuration file from the tree to view and edit it."}

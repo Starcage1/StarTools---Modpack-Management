@@ -4,7 +4,7 @@ import type { OnlineFetchProgress, OnlineModData } from "../shared/types";
 
 const VERSION_FILES_URL = "https://api.modrinth.com/v2/version_files";
 const PROJECTS_URL = "https://api.modrinth.com/v2/projects";
-const USER_AGENT = "StarTools-Modpack-Manager/0.5.0";
+const USER_AGENT = "StarTools-Modpack-Manager/0.6.0";
 const REQUEST_TIMEOUT_MS = 20000;
 const ICON_TIMEOUT_MS = 15000;
 const ICON_MAX_BYTES = 1024 * 1024;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   Archive,
   ArrowUpDown,
   ExternalLink,
@@ -41,6 +42,8 @@ interface ModTableProps {
   onOpenConfig: (mod: ParsedMod) => void;
   onOpenConfigInVSCode: (mod: ParsedMod) => void;
   onEditCats: (mod: ParsedMod) => void;
+  forgeFamilyInstance: boolean;
+  sinytraConnectorActive: boolean;
   emptyHint?: string;
 }
 
@@ -92,6 +95,8 @@ function ModTable({
   onOpenConfig,
   onOpenConfigInVSCode,
   onEditCats,
+  forgeFamilyInstance,
+  sinytraConnectorActive,
   emptyHint,
 }: ModTableProps): React.JSX.Element {
   const [menu, setMenu] = useState<{
@@ -211,6 +216,22 @@ function ModTable({
                     >
                       {mod.name}
                     </span>
+                    {mod.isFabricMod && forgeFamilyInstance && sinytraConnectorActive && (
+                      <span
+                        title="Fabric mod supported through Sinytra Connector"
+                        className="mod-table-badge inline-flex shrink-0 items-center rounded-full border border-cyan-500/40 bg-cyan-950/80 px-1.5 py-0.5 font-mono font-semibold uppercase tracking-wider text-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.15)]"
+                      >
+                        FABRIC
+                      </span>
+                    )}
+                    {mod.incompatibleFabric && (
+                      <span
+                        title="Fabric Mod (Incompatible on Forge/NeoForge without Sinytra Connector)"
+                        className="mod-table-badge inline-flex shrink-0 items-center gap-1 rounded border border-amber-700/40 bg-amber-950/30 px-1.5 py-0.5 font-sans text-amber-300"
+                      >
+                        <AlertTriangle size={10} /> Incompatible
+                      </span>
+                    )}
                     {!mod.enabled && (
                       <span
                         title="Disabled (in \disabledmods\)"

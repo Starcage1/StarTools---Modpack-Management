@@ -374,6 +374,31 @@ function SettingsModal({
                       </label>
                     ))}
                   </div>
+                  <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <SettingLabel title="Startup Window Mode" />
+                    <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                      Choose how StarTools opens on launch.
+                    </p>
+                    <select
+                      value={settings.startupWindowMode}
+                      onChange={(event) =>
+                        onChange({
+                          startupWindowMode: event.target
+                            .value as AppSettings["startupWindowMode"],
+                        })
+                      }
+                      className={selectClass}
+                    >
+                      <option value="windowed">
+                        Windowed (1280 × 800 centered)
+                      </option>
+                      <option value="maximized">Maximized</option>
+                      <option value="fullscreen">Fullscreen</option>
+                    </select>
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      Applies the next time StarTools starts.
+                    </p>
+                  </div>
                 </Accordion>
                 <Accordion
                   title="Modlist layout"
@@ -404,6 +429,163 @@ function SettingsModal({
                       </label>
                     ))}
                   </div>
+                  <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <SettingLabel
+                      title="Incompatible Fabric Mods Position"
+                      help="Applies when Forge/NeoForge mods include Fabric-only archives without Sinytra Connector."
+                    />
+                    <div className="mt-2 space-y-2">
+                      {(
+                        [
+                          { value: "end", label: "End of list" },
+                          { value: "start", label: "Start of list" },
+                          {
+                            value: "alphabetical",
+                            label: "Standard alphabetical (inline)",
+                          },
+                        ] as const
+                      ).map((option) => (
+                        <label
+                          key={option.value}
+                          className="flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-3 py-2.5 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                        >
+                          <input
+                            type="radio"
+                            name="incompatible-fabric-placement"
+                            checked={
+                              settings.incompatibleFabricPlacement ===
+                              option.value
+                            }
+                            onChange={() =>
+                              onChange({
+                                incompatibleFabricPlacement: option.value,
+                              })
+                            }
+                            className="accent-indigo-500"
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </Accordion>
+                <Accordion
+                  title="Registry & Duplicates"
+                  description="Tune duplicate collision checks in Registry."
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <SettingLabel
+                      title="Cross-Mod Only Collisions"
+                      help="Ignore variants that all belong to the same namespace."
+                    />
+                    <Toggle
+                      checked={settings.crossModOnlyCollisions}
+                      onChange={(checked) =>
+                        onChange({ crossModOnlyCollisions: checked })
+                      }
+                      label="Cross-Mod Only Collisions"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-gray-700">
+                    <SettingLabel
+                      title="Ignore Vanilla Backport Mods"
+                      help="Ignore collisions between minecraft and known vanilla backport namespaces."
+                    />
+                    <Toggle
+                      checked={settings.ignoreVanillaBackportDuplicates}
+                      onChange={(checked) =>
+                        onChange({ ignoreVanillaBackportDuplicates: checked })
+                      }
+                      label="Ignore Vanilla Backport Mods"
+                    />
+                  </div>
+                </Accordion>
+                <Accordion
+                  title="P2P Sync"
+                  description="Set the default port and local network detection behavior."
+                >
+                  <div>
+                    <SettingLabel
+                      title="Default Sync Port"
+                      help="Used when hosting and as the default port for friend addresses."
+                    />
+                    <input
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={settings.syncPort}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (
+                          Number.isInteger(value) &&
+                          value >= 1024 &&
+                          value <= 65535
+                        )
+                          onChange({ syncPort: value });
+                      }}
+                      className={selectClass}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-gray-700">
+                    <SettingLabel
+                      title="Auto-Detect Radmin VPN Adapter"
+                      help="Prefer a Radmin VPN address when one is available."
+                    />
+                    <Toggle
+                      checked={settings.autoDetectRadmin}
+                      onChange={(checked) =>
+                        onChange({ autoDetectRadmin: checked })
+                      }
+                      label="Auto-Detect Radmin VPN Adapter"
+                    />
+                  </div>
+                  <div>
+                    <SettingLabel
+                      title="Sync Stream Buffer Size"
+                      help="Larger buffers may improve throughput on fast connections."
+                    />
+                    <select
+                      value={settings.syncBufferSizeKb}
+                      onChange={(event) =>
+                        onChange({
+                          syncBufferSizeKb: Number(
+                            event.target.value,
+                          ) as AppSettings["syncBufferSizeKb"],
+                        })
+                      }
+                      className={selectClass}
+                    >
+                      <option value={512}>512 KB</option>
+                      <option value={1024}>1 MB</option>
+                      <option value={2048}>2 MB</option>
+                    </select>
+                  </div>
+                </Accordion>
+                <Accordion
+                  title="Performance"
+                  description="Adjust search responsiveness for large modpacks and registries."
+                >
+                  <div>
+                    <SettingLabel
+                      title="Search Input Debounce"
+                      help="Wait this long after typing before filtering large lists."
+                    />
+                    <select
+                      value={settings.searchInputDebounceMs}
+                      onChange={(event) =>
+                        onChange({
+                          searchInputDebounceMs: Number(
+                            event.target.value,
+                          ) as AppSettings["searchInputDebounceMs"],
+                        })
+                      }
+                      className={selectClass}
+                    >
+                      <option value={100}>100 ms</option>
+                      <option value={150}>150 ms (Default)</option>
+                      <option value={250}>250 ms</option>
+                    </select>
+                  </div>
                 </Accordion>
               </>
             )}
@@ -415,7 +597,10 @@ function SettingsModal({
                   description="Set executable paths for archive and config-file integrations."
                 >
                   <div>
-                    <SettingLabel title="NanaZip executable path" />
+                    <SettingLabel
+                      title="NanaZip GUI executable path"
+                      help="Choose NanaZipG.exe. NanaZip's Universal Windows executable is command-line only and cannot open an archive window."
+                    />
                     <input
                       value={settings.nanaZipPath ?? ""}
                       onChange={(e) =>
